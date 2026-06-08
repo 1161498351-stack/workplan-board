@@ -46,6 +46,7 @@ db.exec(`
     contact_person TEXT,
     contact_dept TEXT,
     contact_org TEXT,
+    participants TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
@@ -77,6 +78,7 @@ try {
 try { db.exec("ALTER TABLE tasks ADD COLUMN contact_person TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN contact_dept TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN contact_org TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE tasks ADD COLUMN participants TEXT"); } catch(e) {}
 
 // ============================================================
 // INIT: Create default admin if no users exist
@@ -151,7 +153,7 @@ function getCategories(userId) {
         result: t.result,
         contactPerson: t.contact_person,
         contactDept: t.contact_dept,
-        contactOrg: t.contact_org
+        contactOrg: t.contact_org, participants: t.participants
       }))
     };
   });
@@ -181,7 +183,7 @@ function getCategories(userId) {
           result: t.result,
           contactPerson: t.contact_person,
           contactDept: t.contact_dept,
-          contactOrg: t.contact_org,
+          contactOrg: t.contact_org, participants: t.participants,
           fromUser: t.owner_name
         }))
       });
@@ -211,7 +213,7 @@ function getCategories(userId) {
         result: t.result,
         contactPerson: t.contact_person,
         contactDept: t.contact_dept,
-        contactOrg: t.contact_org,
+        contactOrg: t.contact_org, participants: t.participants,
         fromUser: null,
         outgoingTo: t.assignee
       }))
@@ -239,8 +241,8 @@ function deleteCategory(catId, userId) {
 // ============================================================
 function createTask(userId, categoryId, data) {
   const result = db.prepare(`
-    INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(categoryId, userId,
     data.name || '新事项',
     data.priority || 'P2',
@@ -252,7 +254,8 @@ function createTask(userId, categoryId, data) {
     data.result || null,
     data.contactPerson || null,
     data.contactDept || null,
-    data.contactOrg || null
+    data.contactOrg || null,
+    data.participants || null
   );
   return { id: String(result.lastInsertRowid), ...data, name: data.name || '新事项' };
 }
@@ -272,6 +275,8 @@ function updateTask(taskId, userId, data) {
   if (data.contactPerson !== undefined) { fields.push('contact_person = ?'); values.push(data.contactPerson); }
   if (data.contactDept !== undefined)   { fields.push('contact_dept = ?'); values.push(data.contactDept); }
   if (data.contactOrg !== undefined)    { fields.push('contact_org = ?'); values.push(data.contactOrg); }
+  if (data.participants !== undefined)  { fields.push('participants = ?'); values.push(data.participants); }
+  if (data.categoryId !== undefined)    { fields.push('category_id = ?'); values.push(data.categoryId); }
 
   if (fields.length === 0) return;
 
@@ -301,13 +306,14 @@ function importData(userId, categories) {
       if (cat.items) {
         for (const item of cat.items) {
           db.prepare(`
-            INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(catId, userId,
             item.name, item.priority || 'P2', item.status || 'not-started',
             item.assignee || null, item.deadline || null, item.completedAt || null,
             item.thought || null, item.result || null,
-            item.contactPerson || null, item.contactDept || null, item.contactOrg || null
+            item.contactPerson || null, item.contactDept || null, item.contactOrg || null,
+            item.participants || null
           );
         }
       }

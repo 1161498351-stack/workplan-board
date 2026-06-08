@@ -239,12 +239,16 @@
   <div class="modal modal-md">
     <h3>编辑事项</h3><div class="modal-sub" id="modalItemName"></div>
     <div class="field"><label>事项名称</label><input type="text" id="editName"></div>
+    <div class="row-2">
+      <div class="field"><label>所属分组</label><select id="editCategory"></select></div>
+      <div class="field"><label>负责人</label><input type="text" id="editAssignee" placeholder="主要负责人"></div>
+    </div>
+    <div class="field"><label>参与人员</label><input type="text" id="editParticipants" placeholder="多人用逗号分隔，如：张三, 李四, 王五"></div>
     <div class="row-3">
       <div class="field"><label>优先级</label><select id="editPriority"><option value="P0">P0 紧急</option><option value="P1">P1 高</option><option value="P2">P2 中</option><option value="P3">P3 低</option></select></div>
       <div class="field"><label>状态</label><select id="editStatus" onchange="onStatusChange()"><option value="not-started">未开始</option><option value="pending">待启动</option><option value="in-progress">进行中</option><option value="ongoing">持续进行</option><option value="blocked">阻塞</option><option value="done">已完成</option></select></div>
       <div class="field"><label>计划截至</label><input type="date" id="editDeadline"></div>
     </div>
-    <div class="field"><label>负责人</label><input type="text" id="editAssignee" placeholder="请输入负责人姓名"></div>
     <div class="field"><label>完成日期</label><div style="display:flex;gap:6px;align-items:center;"><input type="date" id="editCompletedAt" style="flex:1;"><button class="btn btn-xs btn-secondary" onclick="setCompletionDate(0)" type="button">今天</button><button class="btn btn-xs btn-secondary" onclick="setCompletionDate(-1)" type="button">昨天</button><button class="btn btn-xs btn-secondary" onclick="setCompletionDate('clear')" type="button">清除</button></div></div>
     <div class="field" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;"><label style="color:var(--text-muted);">🔗 对接信息（选填）</label></div>
     <div class="row-3">
@@ -341,7 +345,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-var API_BASE = 'https://workplan-board.onrender.com';
+var API_BASE = 'http://localhost:3456';
 
 // ============================================================
 // API
@@ -540,7 +544,7 @@ function handleBatchExcel(event){
 var data=[],currentFilter='all',editCatId=null,editItemId=null;
 async function loadData(){try{data=await apiFetch('/api/data');if(data.length===0)console.log('数据为空，可能是首次使用');console.log('已加载',data.length,'个分组');}catch(e){console.error('加载失败:',e.message);alert('数据加载失败: '+e.message+'\n请确认后端已启动(start.bat)');data=[];}}
 async function saveCategoryName(cid,name){await apiFetch('/api/categories/'+cid,{method:'PUT',body:{name:name}});}
-async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,thought:item.thought,result:item.result}});}
+async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,participants:item.participants,categoryId:item.categoryId,thought:item.thought,result:item.result}});}
 
 // HELPERS
 var STATUS_LABEL={'done':'已完成','in-progress':'进行中','ongoing':'持续中','pending':'待启动','not-started':'未开始','blocked':'阻塞'};
@@ -645,11 +649,18 @@ async function cycleStatus(cid,iid){var item=findItem(cid,iid);if(!item)return;v
 // ============================================================
 // MODAL
 // ============================================================
-function openEdit(cid,iid){editCatId=cid;editItemId=iid;var item=findItem(cid,iid);if(!item)return;document.getElementById('modalItemName').textContent=item.name;document.getElementById('editName').value=item.name;document.getElementById('editPriority').value=item.priority;document.getElementById('editStatus').value=item.status;document.getElementById('editAssignee').value=item.assignee||'';document.getElementById('editDeadline').value=item.deadline||'';document.getElementById('editCompletedAt').value=item.completedAt||'';document.getElementById('editContactPerson').value=item.contactPerson||'';document.getElementById('editContactDept').value=item.contactDept||'';document.getElementById('editContactOrg').value=item.contactOrg||'';document.getElementById('editThought').value=item.thought||'';document.getElementById('editResult').value=item.result||'';document.getElementById('modalDeleteBtn').style.display='';document.getElementById('editModal').classList.add('show');}
+function openEdit(cid,iid){editCatId=cid;editItemId=iid;var item=findItem(cid,iid);if(!item)return;document.getElementById('modalItemName').textContent=item.name;document.getElementById('editName').value=item.name;
+// Populate category dropdown
+var catSel=document.getElementById('editCategory');catSel.innerHTML=data.filter(function(c){return c.id!=='__assigned__'&&c.id!=='__outgoing__';}).map(function(c){return'<option value="'+c.id+'"'+(c.id===cid?' selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+document.getElementById('editPriority').value=item.priority;document.getElementById('editStatus').value=item.status;document.getElementById('editAssignee').value=item.assignee||'';document.getElementById('editParticipants').value=item.participants||'';document.getElementById('editDeadline').value=item.deadline||'';document.getElementById('editCompletedAt').value=item.completedAt||'';document.getElementById('editContactPerson').value=item.contactPerson||'';document.getElementById('editContactDept').value=item.contactDept||'';document.getElementById('editContactOrg').value=item.contactOrg||'';document.getElementById('editThought').value=item.thought||'';document.getElementById('editResult').value=item.result||'';document.getElementById('modalDeleteBtn').style.display='';document.getElementById('editModal').classList.add('show');}
 function setCompletionDate(offset){if(offset==='clear'){document.getElementById('editCompletedAt').value='';return;}var d=new Date();d.setDate(d.getDate()+offset);document.getElementById('editCompletedAt').value=d.toISOString().slice(0,10);}
 function onStatusChange(){var st=document.getElementById('editStatus').value;if(st==='done'&&!document.getElementById('editCompletedAt').value)document.getElementById('editCompletedAt').value=new Date().toISOString().slice(0,10);if(st!=='done')document.getElementById('editCompletedAt').value='';}
 function closeModal(){document.getElementById('editModal').classList.remove('show');editCatId=null;editItemId=null;}
-async function saveEdit(){if(!editCatId||!editItemId)return;var item=findItem(editCatId,editItemId);if(!item)return;item.name=document.getElementById('editName').value.trim()||item.name;item.priority=document.getElementById('editPriority').value;item.status=document.getElementById('editStatus').value;item.assignee=document.getElementById('editAssignee').value.trim()||null;item.deadline=document.getElementById('editDeadline').value||null;item.completedAt=document.getElementById('editCompletedAt').value||null;item.contactPerson=document.getElementById('editContactPerson').value.trim()||null;item.contactDept=document.getElementById('editContactDept').value.trim()||null;item.contactOrg=document.getElementById('editContactOrg').value.trim()||null;item.thought=document.getElementById('editThought').value.trim()||null;item.result=document.getElementById('editResult').value.trim()||null;try{await saveTaskItem(item);}catch(e){alert('保存失败：'+e.message);}renderAll();closeModal();}
+async function saveEdit(){if(!editCatId||!editItemId)return;var item=findItem(editCatId,editItemId);if(!item)return;item.name=document.getElementById('editName').value.trim()||item.name;item.priority=document.getElementById('editPriority').value;item.status=document.getElementById('editStatus').value;item.assignee=document.getElementById('editAssignee').value.trim()||null;item.participants=document.getElementById('editParticipants').value.trim()||null;item.deadline=document.getElementById('editDeadline').value||null;item.completedAt=document.getElementById('editCompletedAt').value||null;item.contactPerson=document.getElementById('editContactPerson').value.trim()||null;item.contactDept=document.getElementById('editContactDept').value.trim()||null;item.contactOrg=document.getElementById('editContactOrg').value.trim()||null;item.thought=document.getElementById('editThought').value.trim()||null;item.result=document.getElementById('editResult').value.trim()||null;
+// Handle category change
+var newCatId=document.getElementById('editCategory').value;
+if(newCatId!==editCatId){item.categoryId=parseInt(newCatId);var newCat=findCat(newCatId);var oldCat=findCat(editCatId);if(oldCat&&newCat){oldCat.items=oldCat.items.filter(function(i){return i.id!==editItemId;});newCat.items.push(item);editCatId=newCatId;}}
+try{await saveTaskItem(item);}catch(e){alert('保存失败：'+e.message);}renderAll();closeModal();}
 async function deleteItem(){if(!editCatId||!editItemId)return;if(!confirm('确定删除？'))return;try{await apiFetch('/api/tasks/'+editItemId,{method:'DELETE'});}catch(e){alert('失败');return;}var cat=findCat(editCatId);if(cat)cat.items=cat.items.filter(function(i){return i.id!==editItemId;});renderAll();closeModal();}
 
 // ============================================================
