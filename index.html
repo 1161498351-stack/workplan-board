@@ -851,6 +851,8 @@ var _assignCatId=null, _assignItemId=null;
 
 async function showAssignPopup(event, catId, itemId){
   event.stopPropagation();
+  var task=findItem(catId,itemId);
+  if(task&&task.scope==='项目'&&currentRole!=='admin'){alert('项目任务仅管理员可分发。');return;}
   _assignCatId=catId; _assignItemId=itemId;
   var popup=document.getElementById('assignPopup');
   // Position the popup near the click
