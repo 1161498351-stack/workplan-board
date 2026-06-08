@@ -48,6 +48,7 @@ db.exec(`
     contact_org TEXT,
     participants TEXT,
     scope TEXT NOT NULL DEFAULT '组织',
+    parent_id INTEGER,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
@@ -81,6 +82,7 @@ try { db.exec("ALTER TABLE tasks ADD COLUMN contact_dept TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN contact_org TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN participants TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE tasks ADD COLUMN scope TEXT NOT NULL DEFAULT '组织'"); } catch(e) {}
+try { db.exec("ALTER TABLE tasks ADD COLUMN parent_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE"); } catch(e) {}
 
 // ============================================================
 // INIT: Create default admin if no users exist
@@ -139,11 +141,15 @@ function getCategories(userId) {
 
   const cats = db.prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY sort_order, id').all(userId);
   const result = cats.map(cat => {
-    const tasks = db.prepare('SELECT * FROM tasks WHERE category_id = ? ORDER BY sort_order, id').all(cat.id);
+    const tasks = db.prepare('SELECT * FROM tasks WHERE category_id = ? AND parent_id IS NULL ORDER BY sort_order, id').all(cat.id);
     return {
       id: String(cat.id),
       name: cat.name,
-      items: tasks.map(t => ({
+      items: tasks.map(t => makeTaskItem(t, cat.id))
+    };
+
+    function makeTaskItem(t, catId) {
+      const item = ({
         id: String(t.id),
         name: t.name,
         priority: t.priority,
@@ -155,9 +161,12 @@ function getCategories(userId) {
         result: t.result,
         contactPerson: t.contact_person,
         contactDept: t.contact_dept,
-        contactOrg: t.contact_org, participants: t.participants, scope: t.scope
-      }))
-    };
+        contactOrg: t.contact_org, participants: t.participants, scope: t.scope, parentId: t.parent_id ? String(t.parent_id) : null
+      });
+      const subs = db.prepare('SELECT * FROM tasks WHERE parent_id = ? ORDER BY sort_order, id').all(t.id);
+      if (subs.length > 0) item.children = subs.map(s => makeTaskItem(s, catId));
+      return item;
+    }
   });
 
   // Add "assigned to me" tasks from same department (different user)
@@ -186,7 +195,7 @@ function getCategories(userId) {
           contactPerson: t.contact_person,
           contactDept: t.contact_dept,
           contactOrg: t.contact_org, participants: t.participants, scope: t.scope,
-          fromUser: t.owner_name
+          fromUser: t.owner_name, parentId: null
         }))
       });
     }
@@ -243,8 +252,8 @@ function deleteCategory(catId, userId) {
 // ============================================================
 function createTask(userId, categoryId, data) {
   const result = db.prepare(`
-    INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants, scope)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants, scope, parent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(categoryId, userId,
     data.name || '新事项',
     data.priority || 'P2',
@@ -258,7 +267,8 @@ function createTask(userId, categoryId, data) {
     data.contactDept || null,
     data.contactOrg || null,
     data.participants || null,
-    data.scope || '组织'
+    data.scope || '组织',
+    data.parentId || null
   );
   return { id: String(result.lastInsertRowid), ...data, name: data.name || '新事项' };
 }
@@ -281,6 +291,7 @@ function updateTask(taskId, userId, data) {
   if (data.participants !== undefined)  { fields.push('participants = ?'); values.push(data.participants); }
   if (data.scope !== undefined)         { fields.push('scope = ?'); values.push(data.scope); }
   if (data.categoryId !== undefined)    { fields.push('category_id = ?'); values.push(data.categoryId); }
+  if (data.parentId !== undefined)      { fields.push('parent_id = ?'); values.push(data.parentId); }
 
   if (fields.length === 0) return;
 
@@ -310,15 +321,16 @@ function importData(userId, categories) {
       if (cat.items) {
         for (const item of cat.items) {
           db.prepare(`
-            INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants, scope)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO tasks (category_id, user_id, name, priority, status, assignee, deadline, completed_at, thought, result, contact_person, contact_dept, contact_org, participants, scope, parent_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(catId, userId,
             item.name, item.priority || 'P2', item.status || 'not-started',
             item.assignee || null, item.deadline || null, item.completedAt || null,
             item.thought || null, item.result || null,
             item.contactPerson || null, item.contactDept || null, item.contactOrg || null,
             item.participants || null,
-            item.scope || '组织'
+            item.scope || '组织',
+            item.parentId || null
           );
         }
       }

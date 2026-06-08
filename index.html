@@ -562,7 +562,7 @@ function handleBatchExcel(event){
 var data=[],currentFilter='all',editCatId=null,editItemId=null;
 async function loadData(){try{data=await apiFetch('/api/data');if(data.length===0)console.log('数据为空，可能是首次使用');console.log('已加载',data.length,'个分组');}catch(e){console.error('加载失败:',e.message);alert('数据加载失败: '+e.message+'\n请确认后端已启动(start.bat)');data=[];}}
 async function saveCategoryName(cid,name){await apiFetch('/api/categories/'+cid,{method:'PUT',body:{name:name}});}
-async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,scope:item.scope,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,participants:item.participants,categoryId:item.categoryId,thought:item.thought,result:item.result}});}
+async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,parentId:item.parentId,scope:item.scope,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,participants:item.participants,categoryId:item.categoryId,thought:item.thought,result:item.result}});}
 
 // HELPERS
 var STATUS_LABEL={'done':'已完成','in-progress':'进行中','ongoing':'持续中','pending':'待启动','not-started':'未开始','blocked':'阻塞'};
@@ -621,7 +621,7 @@ function renderContent(){
       var ov=isOverdue(item),dl=fmtDate(item.deadline),dd=fmtDate(item.completedAt);
       return '<tr><td class="col-seq"><span class="seq">'+(idx+1)+'</span></td>'+
         '<td class="col-pri"><span class="badge-pri '+pCls+'" onclick="cyclePriority(\''+cat.id+'\',\''+item.id+'\')">'+item.priority+'</span></td>'+
-        '<td class="col-name" style="font-weight:600;">'+esc(item.name)+
+        '<td class="col-name" style="font-weight:600;">'+(item._depth?'<span style="display:inline-block;width:'+(item._depth*20)+'px;"></span>└ ':'')+esc(item.name)+
   (item.scope?' <span style="font-size:9px;color:#fff;background:'+(item.scope==='个人'?'#6b7280':item.scope==='组织'?'#2563eb':'#7c3aed')+';padding:1px 5px;border-radius:3px;">'+item.scope+'</span>':'')+
   (item.fromUser?' <span style="font-size:10px;color:var(--accent);">← '+esc(item.fromUser)+'</span>':'')+'</td>'+
         '<td class="col-status"><span class="badge-status '+sCls+'" onclick="cycleStatus(\''+cat.id+'\',\''+item.id+'\')">'+STATUS_LABEL[item.status]+'</span></td>'+
@@ -688,7 +688,7 @@ async function deleteItem(){if(!editCatId||!editItemId)return;if(!confirm('确�
 // ============================================================
 // CRUD
 // ============================================================
-async function addItem(catId){var scope=(currentFilter==='个人'||currentFilter==='组织'||currentFilter==='项目')?currentFilter:'组织';try{var r=await apiFetch('/api/tasks',{method:'POST',body:{categoryId:parseInt(catId),name:'新事项',priority:'P2',status:'not-started',scope:scope}});await loadData();renderAll();setTimeout(function(){openEdit(catId,r.id);},200);}catch(e){alert('失败：'+e.message);}}
+async function addItem(catId,parentId){var scope=(currentFilter==='个人'||currentFilter==='组织'||currentFilter==='项目')?currentFilter:'组织';try{var r=await apiFetch('/api/tasks',{method:'POST',body:{categoryId:parseInt(catId),name:'新事项',priority:'P2',status:'not-started',scope:scope,parentId:parentId||null}});await loadData();renderAll();setTimeout(function(){openEdit(catId,r.id);},200);}catch(e){alert('失败：'+e.message);}}
 async function addCategory(){var n=prompt('分组名称：');if(!n||!n.trim())return;try{await apiFetch('/api/categories',{method:'POST',body:{name:n.trim()}});await loadData();renderAll();}catch(e){alert('失败：'+e.message);}}
 async function renameCategory(catId){var cat=findCat(catId);if(!cat)return;var n=prompt('新名称：',cat.name);if(!n||!n.trim())return;try{await saveCategoryName(catId,n.trim());cat.name=n.trim();}catch(e){alert('失败');}renderAll();}
 async function deleteCategory(catId){var cat=findCat(catId);if(!cat)return;if(!confirm('确定删除分组「'+cat.name+'」？'))return;try{await apiFetch('/api/categories/'+catId,{method:'DELETE'});}catch(e){alert('失败');return;}data=data.filter(function(c){return c.id!==catId;});renderAll();}
