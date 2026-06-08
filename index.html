@@ -178,7 +178,7 @@
   <span class="topbar-title">工作计划推进看板</span>
   <div class="topbar-actions">
     <span style="font-size:11px;opacity:0.7;" id="currentUserLabel"></span>
-    <button class="btn btn-ghost btn-sm" id="btnNotify" onclick="toggleNotifyPanel()" style="display:none;position:relative;">🔔 <span id="notifyBadge" style="position:absolute;top:-4px;right:-6px;background:var(--red);color:#fff;border-radius:10px;padding:0 5px;font-size:10px;display:none;">0</span></button>
+    <button class="btn btn-ghost btn-sm" id="btnNotify" onclick="toggleNotifyPanel()" style="display:none;position:relative;">🔔 <span id="notifyBadge" style="position:absolute;top:-4px;right:-6px;background:var(--red);color:#fff;border-radius:10px;padding:0 5px;font-size:11px;font-weight:700;display:none;min-width:18px;text-align:center;">0</span></button>
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('importFile').click()">📥 导入JSON</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('excelFile').click()">📊 导入Excel</button>
@@ -345,6 +345,14 @@
   </div>
   <div class="notify-body" id="notifyBody">
     <div style="text-align:center;padding:24px;color:var(--text-muted);">暂无通知</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="personModal">
+  <div class="modal modal-wide">
+    <h3 id="personModalTitle"></h3>
+    <div id="personTasks" style="max-height:60vh;overflow:auto;"></div>
+    <div class="modal-btns"><button class="btn btn-secondary btn-sm" onclick="closePersonModal()">关闭</button></div>
   </div>
 </div>
 
@@ -625,7 +633,7 @@ function renderContent(){
   (item.scope?' <span style="font-size:9px;color:#fff;background:'+(item.scope==='个人'?'#6b7280':item.scope==='组织'?'#2563eb':'#7c3aed')+';padding:1px 5px;border-radius:3px;">'+item.scope+'</span>':'')+
   (item.fromUser?' <span style="font-size:10px;color:var(--accent);">← '+esc(item.fromUser)+'</span>':'')+'</td>'+
         '<td class="col-status"><span class="badge-status '+sCls+'" onclick="cycleStatus(\''+cat.id+'\',\''+item.id+'\')">'+STATUS_LABEL[item.status]+'</span></td>'+
-        '<td class="col-assignee"><span class="date-cell'+(item.assignee?'':' empty')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(item.assignee?esc(item.assignee):'指定…')+'</span></td>'+
+        '<td class="col-assignee"><span class="date-cell'+(item.assignee?'':' empty')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(item.assignee?'<span style="cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation();showPersonView(\''+esc(item.assignee)+'\')" title="查看此人所有任务">'+esc(item.assignee)+'</span>':'指定…')+'</span></td>'+
         '<td class="col-deadline"><span class="date-cell'+(dl?'':' empty')+(ov?' overdue':'')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(dl?(ov?'⚠ ':'')+dl:'设置…')+'</span></td>'+
         '<td class="col-done-date"><span class="date-cell'+(dd?'':' empty')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(dd||'—')+'</span></td>'+
         '<td class="col-contact"><div style="font-size:11px;line-height:1.4;">'+
@@ -863,7 +871,9 @@ async function showAssignPopup(event, catId, itemId){
   // Fetch user list
   try{
     var users=await apiFetch('/api/users/assignable');
+    var task=findItem(catId,itemId);var team=task&&task.participants?task.participants.split(/[,，]/).map(function(s){return s.trim();}).filter(Boolean):[];
     popup.innerHTML='<div style="padding:8px;font-size:12px;font-weight:700;color:var(--text-secondary);border-bottom:1px solid var(--border-light);">📤 分发给谁？</div>'+
+    (team.length>0?'<div style="padding:6px 12px;font-size:10px;color:var(--text-muted);">项目团队</div>'+team.map(function(p){return'<button class="user-item" onclick="doAssign(\''+p+'\')"><span>'+esc(p)+'</span></button>';}).join('')+'<div style="border-top:1px solid var(--border-light);margin:4px 0;"></div>':'')+
       users.map(function(u){
         var isMe=u.username===currentUser;
         return'<button class="user-item" onclick="doAssign(\''+u.username+'\')">'+
@@ -893,13 +903,37 @@ document.addEventListener('click',function(e){
 });
 
 // ============================================================
+// PERSONNEL VIEW
+// ============================================================
+function showPersonView(name){
+  document.getElementById('personModalTitle').textContent='👤 '+name+' 的任务总览';
+  var allTasks=[];
+  data.forEach(function(cat){cat.items.forEach(function(item){collect(item,name);});});
+  function collect(item,name){
+    if(item.assignee===name||(item.participants||'').indexOf(name)!==-1){var t=Object.assign({},item);t._cat=cat.name;allTasks.push(t);}
+    if(item.children)item.children.forEach(function(c){collect(c,name);});
+  }
+  if(allTasks.length===0){document.getElementById('personTasks').innerHTML='<div style="text-align:center;padding:24px;color:var(--text-muted);">该人员暂无相关任务</div>';}
+  else{
+    var tbl='<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:var(--gray-light);">'+
+      '<th style="padding:8px;text-align:left;">事项</th><th style="padding:8px;">分类</th><th style="padding:8px;">优先级</th><th style="padding:8px;">状态</th><th style="padding:8px;">截至</th><th style="padding:8px;">完成</th></tr></thead><tbody>';
+    allTasks.forEach(function(t){tbl+='<tr><td style="padding:8px;font-weight:600;">'+esc(t.name)+'</td><td style="padding:8px;">'+(t.scope||'')+'</td><td style="padding:8px;">'+t.priority+'</td><td style="padding:8px;">'+(STATUS_LABEL[t.status]||t.status)+'</td><td style="padding:8px;">'+(t.deadline||'-')+'</td><td style="padding:8px;">'+(t.completedAt||'-')+'</td></tr>';});
+    tbl+='</tbody></table>';
+    document.getElementById('personTasks').innerHTML=tbl;
+  }
+  document.getElementById('personModal').classList.add('show');
+}
+function closePersonModal(){document.getElementById('personModal').classList.remove('show');}
+
+// ============================================================
 // INIT
 // ============================================================
 function init(){var token=getToken();if(token){try{var p=JSON.parse(atob(token.split('.')[1]));currentUser=p.username;currentRole=p.role;showApp();return;}catch(e){}}}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal();closeExcelModal();closeUserModal();}});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeModal();closeExcelModal();closeUserModal();closePersonModal();}});
 document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 document.getElementById('excelModal').addEventListener('click',function(e){if(e.target===this)closeExcelModal();});
 document.getElementById('userModal').addEventListener('click',function(e){if(e.target===this)closeUserModal();});
+document.getElementById('personModal').addEventListener('click',function(e){if(e.target===this)closePersonModal();});
 init();
 </script>
 </body>
