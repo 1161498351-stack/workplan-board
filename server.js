@@ -58,7 +58,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/register', authMiddleware, adminOnly, (req, res) => {
-  const { username, password, role } = req.body;
+  const { username, password, role, department } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: '请输入账号和密码' });
   }

@@ -293,7 +293,7 @@
     <h3>用户管理</h3><div class="modal-sub">管理员添加用户、批量创建、管理账号</div>
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:3px;">单个添加</label>
-      <div style="display:flex;gap:8px;"><input type="text" id="newUserUsername" placeholder="账号" style="flex:1;"><input type="password" id="newUserPassword" placeholder="密码" style="flex:1;"><select id="newUserRole" style="width:100px;"><option value="user">普通用户</option><option value="admin">管理员</option></select><button class="btn btn-primary btn-sm" onclick="addUser()">添加</button></div>
+      <div style="display:flex;gap:8px;"><input type="text" id="newUserUsername" placeholder="账号" style="flex:1;"><input type="password" id="newUserPassword" placeholder="密码" style="flex:1;"><select id="newUserDept" style="width:110px;" onfocus="loadDeptOptionsSingle()"><option value="">部门（可选）</option></select><select id="newUserRole" style="width:100px;"><option value="user">普通用户</option><option value="admin">管理员</option></select><button class="btn btn-primary btn-sm" onclick="addUser()">添加</button></div>
     </div>
     <div style="margin-bottom:14px;border-top:1px solid var(--border);padding-top:14px;">
       <label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:3px;">📋 批量创建用户</label>
@@ -489,15 +489,18 @@ async function addUser(){
   var pw=document.getElementById('newUserPassword').value;
   var role=document.getElementById('newUserRole').value;
   if(!un||un.length<2){alert('账号至少2字符');return;}if(!pw||pw.length<4){alert('密码至少4位');return;}
-  try{await apiFetch('/api/auth/register',{method:'POST',body:{username:un,password:pw,role:role}});document.getElementById('newUserUsername').value='';document.getElementById('newUserPassword').value='';loadUserTable();}
+  try{await apiFetch('/api/auth/register',{method:'POST',body:{username:un,password:pw,role:role,department:dept}});document.getElementById('newUserUsername').value='';document.getElementById('newUserPassword').value='';loadUserTable();}
   catch(e){alert('失败：'+e.message);}
 }
 async function deleteUser(id){if(!confirm('确定删除？'))return;try{await apiFetch('/api/users/'+id,{method:'DELETE'});loadUserTable();}catch(e){alert('失败：'+e.message);}}
 
 // Batch create users
-function loadDeptOptions(){
-  var sel=document.getElementById('batchDept');
-  if(sel.options.length>1)return; // already loaded
+function loadDeptOptionsSingle(){loadDeptOptions('newUserDept');}
+function loadDeptOptions(deptElId){
+  var sel=document.getElementById(deptElId||'batchDept');
+  if(!sel||sel.options.length>1)return;
+  // Populate from existing users
+  var orig=sel.innerHTML;
   try{apiFetch('/api/users/assignable').then(function(users){
     var depts=[];users.forEach(function(u){if(u.department&&depts.indexOf(u.department)===-1)depts.push(u.department);});
     depts.forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
@@ -572,7 +575,7 @@ function itemMatchesFilter(item){
   // Search keyword
   var kw=(document.getElementById('searchInput').value||'').trim().toLowerCase();
   if(kw){
-    var fields=[item.name,item.assignee,item.thought,item.result,item.contactPerson,item.contactDept,item.contactOrg,STATUS_LABEL[item.status],item.priority].filter(Boolean).join(' ').toLowerCase();
+    var fields=[item.name,item.assignee,item.thought,item.result,item.contactPerson,item.contactDept,item.contactOrg,STATUS_LABEL[item.status],item.priority,item.scope,item.participants].filter(Boolean).join(' ').toLowerCase();
     if(fields.indexOf(kw)===-1)return false;
   }
   if(currentFilter==='all')return true;
@@ -685,7 +688,7 @@ async function deleteItem(){if(!editCatId||!editItemId)return;if(!confirm('确�
 // ============================================================
 // CRUD
 // ============================================================
-async function addItem(catId){try{var r=await apiFetch('/api/tasks',{method:'POST',body:{categoryId:parseInt(catId),name:'新事项',priority:'P2',status:'not-started'}});await loadData();renderAll();setTimeout(function(){openEdit(catId,r.id);},200);}catch(e){alert('失败：'+e.message);}}
+async function addItem(catId){var scope=(currentFilter==='个人'||currentFilter==='组织'||currentFilter==='项目')?currentFilter:'组织';try{var r=await apiFetch('/api/tasks',{method:'POST',body:{categoryId:parseInt(catId),name:'新事项',priority:'P2',status:'not-started',scope:scope}});await loadData();renderAll();setTimeout(function(){openEdit(catId,r.id);},200);}catch(e){alert('失败：'+e.message);}}
 async function addCategory(){var n=prompt('分组名称：');if(!n||!n.trim())return;try{await apiFetch('/api/categories',{method:'POST',body:{name:n.trim()}});await loadData();renderAll();}catch(e){alert('失败：'+e.message);}}
 async function renameCategory(catId){var cat=findCat(catId);if(!cat)return;var n=prompt('新名称：',cat.name);if(!n||!n.trim())return;try{await saveCategoryName(catId,n.trim());cat.name=n.trim();}catch(e){alert('失败');}renderAll();}
 async function deleteCategory(catId){var cat=findCat(catId);if(!cat)return;if(!confirm('确定删除分组「'+cat.name+'」？'))return;try{await apiFetch('/api/categories/'+catId,{method:'DELETE'});}catch(e){alert('失败');return;}data=data.filter(function(c){return c.id!==catId;});renderAll();}
@@ -700,7 +703,7 @@ async function importData(event){var file=event.target.files[0];if(!file)return;
 // EXCEL IMPORT
 // ============================================================
 var excelData=[],excelHeaders=[],excelMappings={};
-var FIELD_OPTIONS=[{value:'',label:'— 忽略 —'},{value:'name',label:'事项名称'},{value:'priority',label:'优先级'},{value:'status',label:'状态'},{value:'assignee',label:'负责人'},{value:'deadline',label:'计划截至'},{value:'completedAt',label:'完成日期'},{value:'thought',label:'思考/备注'},{value:'result',label:'结果/产出'}];
+var FIELD_OPTIONS=[{value:'',label:'— 忽略 —'},{value:'name',label:'事项名称'},{value:'priority',label:'优先级'},{value:'status',label:'状态'},{value:'assignee',label:'负责人'},{value:'deadline',label:'计划截至'},{value:'completedAt',label:'完成日期'},{value:'thought',label:'思考/备注'},{value:'result',label:'结果/产出'},{value:'scope',label:'分类(个人/组织/项目)'}];
 
 function handleExcelImport(event){
   var file=event.target.files[0];if(!file)return;
@@ -724,6 +727,7 @@ function handleExcelImport(event){
         else if(/完成.*日期|完成时间|closed/.test(hl))excelMappings[i]='completedAt';
         else if(/思考|备注|说明|thought|note|remark/.test(hl))excelMappings[i]='thought';
         else if(/结果|产出|成果|result|output/.test(hl))excelMappings[i]='result';
+        else if(/分类|scope|个人.*组织|组织.*项目/.test(hl))excelMappings[i]='scope';
         else excelMappings[i]='';
       });
       showExcelModal();
@@ -769,7 +773,7 @@ async function confirmExcelImport(){
       else if(field==='status'){var sl=sv.toLowerCase();if(/完成|done/i.test(sl))td.status='done';else if(/进行|progress/i.test(sl))td.status='in-progress';else if(/阻塞|block/i.test(sl))td.status='blocked';else td.status='pending';}
       else if(field==='deadline'){var d1=parseDate(sv);if(d1)td.deadline=d1;}
       else if(field==='completedAt'){var d2=parseDate(sv);if(d2)td.completedAt=d2;}
-      else if(field==='assignee')td.assignee=sv;else if(field==='thought')td.thought=sv;else if(field==='result')td.result=sv;
+      else if(field==='assignee')td.assignee=sv;else if(field==='thought')td.thought=sv;else if(field==='result')td.result=sv;else if(field==='scope'){var sl2=sv.toLowerCase();if(/个人|personal/.test(sl2))td.scope='个人';else if(/组织|org/.test(sl2))td.scope='组织';else if(/项目|project/.test(sl2))td.scope='项目';}
     });
     try{await apiFetch('/api/tasks',{method:'POST',body:td});imported++;}catch(e){console.error(e);}
   }
@@ -872,6 +876,8 @@ async function doAssign(username){
   document.getElementById('assignPopup').classList.remove('show');
   var item=findItem(_assignCatId,_assignItemId);
   if(!item)return;
+  if(item.assignee===username){return;}
+  if(item.assignee&&!confirm('当前负责人是「'+item.assignee+'」，是否改为「'+username+'」？'))return;
   item.assignee=username;
   try{await saveTaskItem(item);renderAll();}catch(e){alert('分发失败：'+e.message);}
 }
