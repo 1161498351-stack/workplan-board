@@ -485,7 +485,7 @@ async function loadUserTable(){
   }).join('');
 }
 async function addUser(){
-  var un=document.getElementById('newUserUsername').value.trim();
+  var un=document.getElementById("newUserUsername").value.trim();
   var pw=document.getElementById('newUserPassword').value;
   var role=document.getElementById('newUserRole').value;
   if(!un||un.length<2){alert('账号至少2字符');return;}if(!pw||pw.length<4){alert('密码至少4位');return;}
