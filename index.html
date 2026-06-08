@@ -213,6 +213,9 @@
     <span class="filter-label">筛选</span>
     <input type="text" id="searchInput" placeholder="🔍 搜索任务…" oninput="renderAll()" style="padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;width:180px;font-family:inherit;outline:none;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
     <span class="filter-chip active" data-filter="all" onclick="setFilter('all',this)">全部</span>
+    <span class="filter-chip" data-filter="个人" onclick="setFilter('个人',this)">👤 个人</span>
+    <span class="filter-chip" data-filter="组织" onclick="setFilter('组织',this)">🏢 组织</span>
+    <span class="filter-chip" data-filter="项目" onclick="setFilter('项目',this)">📁 项目</span>
     <span class="filter-chip" data-filter="p0" onclick="setFilter('p0',this)">P0 紧急</span>
     <span class="filter-chip" data-filter="p1" onclick="setFilter('p1',this)">P1 高优先</span>
     <span class="filter-chip" data-filter="doing" onclick="setFilter('doing',this)">进行中</span>
@@ -244,8 +247,11 @@
       <div class="field"><label>负责人</label><input type="text" id="editAssignee" placeholder="主要负责人"></div>
     </div>
     <div class="field"><label>参与人员</label><input type="text" id="editParticipants" placeholder="多人用逗号分隔，如：张三, 李四, 王五"></div>
-    <div class="row-3">
+    <div class="row-2">
       <div class="field"><label>优先级</label><select id="editPriority"><option value="P0">P0 紧急</option><option value="P1">P1 高</option><option value="P2">P2 中</option><option value="P3">P3 低</option></select></div>
+      <div class="field"><label>分类</label><select id="editScope"><option value="个人">👤 个人</option><option value="组织">🏢 组织</option><option value="项目">📁 项目</option></select></div>
+    </div>
+    <div class="row-2">
       <div class="field"><label>状态</label><select id="editStatus" onchange="onStatusChange()"><option value="not-started">未开始</option><option value="pending">待启动</option><option value="in-progress">进行中</option><option value="ongoing">持续进行</option><option value="blocked">阻塞</option><option value="done">已完成</option></select></div>
       <div class="field"><label>计划截至</label><input type="date" id="editDeadline"></div>
     </div>
@@ -292,7 +298,8 @@
     <div style="margin-bottom:14px;border-top:1px solid var(--border);padding-top:14px;">
       <label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:3px;">📋 批量创建用户</label>
       <div style="display:flex;gap:8px;margin-bottom:6px;">
-        <input type="text" id="batchDept" placeholder="部门名称（如：运营部）" style="flex:1;">
+        <select id="batchDept" style="flex:1;" onfocus="loadDeptOptions()"><option value="">选择已有部门（或下方输入新部门）</option></select>
+        <input type="text" id="batchDeptNew" placeholder="或输入新部门名称" style="flex:1;margin-top:4px;">
         <button class="btn btn-success btn-sm" onclick="batchImportExcel()">📊 从Excel导入姓名</button>
         <input type="file" id="batchExcelFile" accept=".xlsx,.xls" style="display:none" onchange="handleBatchExcel(event)">
       </div>
@@ -488,8 +495,16 @@ async function addUser(){
 async function deleteUser(id){if(!confirm('确定删除？'))return;try{await apiFetch('/api/users/'+id,{method:'DELETE'});loadUserTable();}catch(e){alert('失败：'+e.message);}}
 
 // Batch create users
+function loadDeptOptions(){
+  var sel=document.getElementById('batchDept');
+  if(sel.options.length>1)return; // already loaded
+  try{apiFetch('/api/users/assignable').then(function(users){
+    var depts=[];users.forEach(function(u){if(u.department&&depts.indexOf(u.department)===-1)depts.push(u.department);});
+    depts.forEach(function(d){var o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
+  });}catch(e){}
+}
 async function batchCreateUsers(){
-  var dept=document.getElementById('batchDept').value.trim();
+  var dept=document.getElementById('batchDept').value.trim()||document.getElementById('batchDeptNew').value.trim();
   var text=document.getElementById('batchUsernames').value.trim();
   if(!text){alert('请输入姓名列表，每行一个');return;}
   var names=text.split(/[\n,，]+/).map(function(s){return s.trim();}).filter(Boolean);
@@ -544,7 +559,7 @@ function handleBatchExcel(event){
 var data=[],currentFilter='all',editCatId=null,editItemId=null;
 async function loadData(){try{data=await apiFetch('/api/data');if(data.length===0)console.log('数据为空，可能是首次使用');console.log('已加载',data.length,'个分组');}catch(e){console.error('加载失败:',e.message);alert('数据加载失败: '+e.message+'\n请确认后端已启动(start.bat)');data=[];}}
 async function saveCategoryName(cid,name){await apiFetch('/api/categories/'+cid,{method:'PUT',body:{name:name}});}
-async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,participants:item.participants,categoryId:item.categoryId,thought:item.thought,result:item.result}});}
+async function saveTaskItem(item){await apiFetch('/api/tasks/'+item.id,{method:'PUT',body:{name:item.name,priority:item.priority,scope:item.scope,status:item.status,assignee:item.assignee,deadline:item.deadline,completedAt:item.completedAt,contactPerson:item.contactPerson,contactDept:item.contactDept,contactOrg:item.contactOrg,participants:item.participants,categoryId:item.categoryId,thought:item.thought,result:item.result}});}
 
 // HELPERS
 var STATUS_LABEL={'done':'已完成','in-progress':'进行中','ongoing':'持续中','pending':'待启动','not-started':'未开始','blocked':'阻塞'};
@@ -560,7 +575,9 @@ function itemMatchesFilter(item){
     var fields=[item.name,item.assignee,item.thought,item.result,item.contactPerson,item.contactDept,item.contactOrg,STATUS_LABEL[item.status],item.priority].filter(Boolean).join(' ').toLowerCase();
     if(fields.indexOf(kw)===-1)return false;
   }
-  if(currentFilter==='all')return true;if(currentFilter==='p0')return item.priority==='P0';
+  if(currentFilter==='all')return true;
+  if(currentFilter==='个人'||currentFilter==='组织'||currentFilter==='项目')return item.scope===currentFilter;
+  if(currentFilter==='p0')return item.priority==='P0';
   if(currentFilter==='p1')return item.priority==='P1';if(currentFilter==='doing')return item.status==='in-progress'||item.status==='ongoing';
   if(currentFilter==='blocked')return item.status==='blocked';if(currentFilter==='overdue')return isOverdue(item);
   if(currentFilter==='done')return item.status==='done';if(currentFilter==='pending')return item.status==='pending'||item.status==='not-started';
@@ -601,7 +618,9 @@ function renderContent(){
       var ov=isOverdue(item),dl=fmtDate(item.deadline),dd=fmtDate(item.completedAt);
       return '<tr><td class="col-seq"><span class="seq">'+(idx+1)+'</span></td>'+
         '<td class="col-pri"><span class="badge-pri '+pCls+'" onclick="cyclePriority(\''+cat.id+'\',\''+item.id+'\')">'+item.priority+'</span></td>'+
-        '<td class="col-name" style="font-weight:600;">'+esc(item.name)+(item.fromUser?' <span style="font-size:10px;color:var(--accent);">← '+esc(item.fromUser)+'</span>':'')+'</td>'+
+        '<td class="col-name" style="font-weight:600;">'+esc(item.name)+
+  (item.scope?' <span style="font-size:9px;color:#fff;background:'+(item.scope==='个人'?'#6b7280':item.scope==='组织'?'#2563eb':'#7c3aed')+';padding:1px 5px;border-radius:3px;">'+item.scope+'</span>':'')+
+  (item.fromUser?' <span style="font-size:10px;color:var(--accent);">← '+esc(item.fromUser)+'</span>':'')+'</td>'+
         '<td class="col-status"><span class="badge-status '+sCls+'" onclick="cycleStatus(\''+cat.id+'\',\''+item.id+'\')">'+STATUS_LABEL[item.status]+'</span></td>'+
         '<td class="col-assignee"><span class="date-cell'+(item.assignee?'':' empty')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(item.assignee?esc(item.assignee):'指定…')+'</span></td>'+
         '<td class="col-deadline"><span class="date-cell'+(dl?'':' empty')+(ov?' overdue':'')+'" onclick="openEdit(\''+cat.id+'\',\''+item.id+'\')">'+(dl?(ov?'⚠ ':'')+dl:'设置…')+'</span></td>'+
@@ -652,11 +671,11 @@ async function cycleStatus(cid,iid){var item=findItem(cid,iid);if(!item)return;v
 function openEdit(cid,iid){editCatId=cid;editItemId=iid;var item=findItem(cid,iid);if(!item)return;document.getElementById('modalItemName').textContent=item.name;document.getElementById('editName').value=item.name;
 // Populate category dropdown
 var catSel=document.getElementById('editCategory');catSel.innerHTML=data.filter(function(c){return c.id!=='__assigned__'&&c.id!=='__outgoing__';}).map(function(c){return'<option value="'+c.id+'"'+(c.id===cid?' selected':'')+'>'+esc(c.name)+'</option>';}).join('');
-document.getElementById('editPriority').value=item.priority;document.getElementById('editStatus').value=item.status;document.getElementById('editAssignee').value=item.assignee||'';document.getElementById('editParticipants').value=item.participants||'';document.getElementById('editDeadline').value=item.deadline||'';document.getElementById('editCompletedAt').value=item.completedAt||'';document.getElementById('editContactPerson').value=item.contactPerson||'';document.getElementById('editContactDept').value=item.contactDept||'';document.getElementById('editContactOrg').value=item.contactOrg||'';document.getElementById('editThought').value=item.thought||'';document.getElementById('editResult').value=item.result||'';document.getElementById('modalDeleteBtn').style.display='';document.getElementById('editModal').classList.add('show');}
+document.getElementById('editPriority').value=item.priority;document.getElementById('editScope').value=item.scope||'组织';document.getElementById('editStatus').value=item.status;document.getElementById('editAssignee').value=item.assignee||'';document.getElementById('editParticipants').value=item.participants||'';document.getElementById('editDeadline').value=item.deadline||'';document.getElementById('editCompletedAt').value=item.completedAt||'';document.getElementById('editContactPerson').value=item.contactPerson||'';document.getElementById('editContactDept').value=item.contactDept||'';document.getElementById('editContactOrg').value=item.contactOrg||'';document.getElementById('editThought').value=item.thought||'';document.getElementById('editResult').value=item.result||'';document.getElementById('modalDeleteBtn').style.display='';document.getElementById('editModal').classList.add('show');}
 function setCompletionDate(offset){if(offset==='clear'){document.getElementById('editCompletedAt').value='';return;}var d=new Date();d.setDate(d.getDate()+offset);document.getElementById('editCompletedAt').value=d.toISOString().slice(0,10);}
 function onStatusChange(){var st=document.getElementById('editStatus').value;if(st==='done'&&!document.getElementById('editCompletedAt').value)document.getElementById('editCompletedAt').value=new Date().toISOString().slice(0,10);if(st!=='done')document.getElementById('editCompletedAt').value='';}
 function closeModal(){document.getElementById('editModal').classList.remove('show');editCatId=null;editItemId=null;}
-async function saveEdit(){if(!editCatId||!editItemId)return;var item=findItem(editCatId,editItemId);if(!item)return;item.name=document.getElementById('editName').value.trim()||item.name;item.priority=document.getElementById('editPriority').value;item.status=document.getElementById('editStatus').value;item.assignee=document.getElementById('editAssignee').value.trim()||null;item.participants=document.getElementById('editParticipants').value.trim()||null;item.deadline=document.getElementById('editDeadline').value||null;item.completedAt=document.getElementById('editCompletedAt').value||null;item.contactPerson=document.getElementById('editContactPerson').value.trim()||null;item.contactDept=document.getElementById('editContactDept').value.trim()||null;item.contactOrg=document.getElementById('editContactOrg').value.trim()||null;item.thought=document.getElementById('editThought').value.trim()||null;item.result=document.getElementById('editResult').value.trim()||null;
+async function saveEdit(){if(!editCatId||!editItemId)return;var item=findItem(editCatId,editItemId);if(!item)return;item.name=document.getElementById('editName').value.trim()||item.name;item.priority=document.getElementById('editPriority').value;item.scope=document.getElementById('editScope').value;item.status=document.getElementById('editStatus').value;item.assignee=document.getElementById('editAssignee').value.trim()||null;item.participants=document.getElementById('editParticipants').value.trim()||null;item.deadline=document.getElementById('editDeadline').value||null;item.completedAt=document.getElementById('editCompletedAt').value||null;item.contactPerson=document.getElementById('editContactPerson').value.trim()||null;item.contactDept=document.getElementById('editContactDept').value.trim()||null;item.contactOrg=document.getElementById('editContactOrg').value.trim()||null;item.thought=document.getElementById('editThought').value.trim()||null;item.result=document.getElementById('editResult').value.trim()||null;
 // Handle category change
 var newCatId=document.getElementById('editCategory').value;
 if(newCatId!==editCatId){item.categoryId=parseInt(newCatId);var newCat=findCat(newCatId);var oldCat=findCat(editCatId);if(oldCat&&newCat){oldCat.items=oldCat.items.filter(function(i){return i.id!==editItemId;});newCat.items.push(item);editCatId=newCatId;}}
